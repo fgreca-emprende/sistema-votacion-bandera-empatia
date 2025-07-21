@@ -3,6 +3,7 @@
 import type React from "react"
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,6 +45,7 @@ interface Candidate {
 
 export default function AdminPage() {
   const { data: session, status } = useSession()
+  const router = useRouter()
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [newCandidate, setNewCandidate] = useState({
     nombre: "",
@@ -93,6 +95,17 @@ export default function AdminPage() {
   useEffect(() => {
     loadCandidates()
   }, [])
+
+  // Redirección automática si no hay sesión
+  useEffect(() => {
+    if (status !== "loading" && !session) {
+      const redirectTimer = setTimeout(() => {
+        router.push('/auth/signin')
+      }, 2000) // Esperar 2 segundos antes de redirigir
+
+      return () => clearTimeout(redirectTimer)
+    }
+  }, [session, status, router])
 
   // Agregar candidato individual
   const addCandidate = async () => {
@@ -313,12 +326,22 @@ export default function AdminPage() {
     )
   }
 
-  // Authentication check
+  // Authentication check - CON FIX DE REDIRECCIÓN
   if (!session) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
         <div className="text-center">
-          <p>No autorizado. Redirigiendo...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p>No autorizado. Redirigiendo a login...</p>
+          <p className="text-sm text-gray-500 mt-2">
+            Si no se redirige automáticamente, 
+            <button 
+              onClick={() => router.push('/auth/signin')} 
+              className="text-blue-600 hover:underline ml-1"
+            >
+              haz clic aquí
+            </button>
+          </p>
         </div>
       </div>
     )
@@ -329,120 +352,127 @@ export default function AdminPage() {
       <div className="max-w-4xl mx-auto space-y-6">
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-2xl font-bold flex items-center gap-2">
-                  <Users className="w-6 h-6" />
-                  Gestión de Candidatos
-                </CardTitle>
-                <CardDescription>
-                  Total: {candidates.length} candidatos | Mostrando: {filteredCandidates.length}
-                </CardDescription>
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={loadCandidates} variant="outline" size="sm">
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Recargar
-                </Button>
-                <Button onClick={() => (window.location.href = "/")} variant="outline">
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Volver
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-              <div>
-                <label className="text-sm font-medium">Filtrar por Grado:</label>
-                <Select value={selectedGrado} onValueChange={setSelectedGrado}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos los grados" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Todos los grados</SelectItem>
-                    {grados.map((grado) => (
-                      <SelectItem key={grado} value={grado}>
-                        {grado}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Filtrar por Curso:</label>
-                <Select value={selectedCurso} onValueChange={setSelectedCurso}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos los cursos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Todos los cursos</SelectItem>
-                    {cursos.map((curso) => (
-                      <SelectItem key={curso} value={curso}>
-                        {curso}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Mes:</label>
-                <Select value={selectedMes} onValueChange={setSelectedMes}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {meses.map((mes) => (
-                      <SelectItem key={mes} value={mes}>
-                        {mes}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Año:</label>
-                <Select value={selectedAno} onValueChange={setSelectedAno}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[getCurrentYear() - 1, getCurrentYear(), getCurrentYear() + 1].map((ano) => (
-                      <SelectItem key={ano} value={ano.toString()}>
-                        {ano}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-              <h3 className="font-semibold mb-2">Carga Masiva desde Excel</h3>
-              <p className="text-sm text-gray-600 mb-3">
-                Formato: Columna 1: Nombre y Apellido | Columna 2: Curso | Columna 3: Grado
-              </p>
-              {uploadSuccess && (
-                <div className="mt-3 p-3 bg-green-100 border border-green-300 rounded-lg">
-                  <p className="text-green-800 font-medium">{uploadSuccess}</p>
+            <div className="space-y-4">
+              {/* Header principal */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+                    <Users className="w-5 h-5 sm:w-6 sm:h-6" />
+                    Gestión de Candidatos
+                  </CardTitle>
+                  <CardDescription className="text-sm">
+                    Total: {candidates.length} candidatos | Mostrando: {filteredCandidates.length}
+                  </CardDescription>
                 </div>
-              )}
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleExcelUpload}
-                  disabled={isUploading}
-                  className="text-sm"
-                  id="excel-upload"
-                />
-                <label htmlFor="excel-upload" className="cursor-pointer">
-                  <Button asChild disabled={isUploading}>
-                    <span>{isUploading ? "Cargando..." : "Cargar Excel"}</span>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button onClick={loadCandidates} variant="outline" size="sm" className="w-full sm:w-auto">
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Recargar
                   </Button>
-                </label>
+                  <Button onClick={() => (window.location.href = "/")} variant="outline" className="w-full sm:w-auto">
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Volver
+                  </Button>
+                </div>
+              </div>
+
+              {/* Filtros */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Filtrar por Grado:</label>
+                  <Select value={selectedGrado} onValueChange={setSelectedGrado}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos los grados" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los grados</SelectItem>
+                      {grados.map((grado) => (
+                        <SelectItem key={grado} value={grado}>
+                          {grado}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Filtrar por Curso:</label>
+                  <Select value={selectedCurso} onValueChange={setSelectedCurso}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos los cursos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los cursos</SelectItem>
+                      {cursos.map((curso) => (
+                        <SelectItem key={curso} value={curso}>
+                          {curso}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Mes:</label>
+                  <Select value={selectedMes} onValueChange={setSelectedMes}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {meses.map((mes) => (
+                        <SelectItem key={mes} value={mes}>
+                          {mes}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Año:</label>
+                  <Select value={selectedAno} onValueChange={setSelectedAno}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[getCurrentYear() - 1, getCurrentYear(), getCurrentYear() + 1].map((ano) => (
+                        <SelectItem key={ano} value={ano.toString()}>
+                          {ano}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Carga masiva - MEJORADA PARA MOBILE */}
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <h3 className="font-semibold mb-2">Carga Masiva desde Excel</h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  Formato: Columna 1: Nombre y Apellido | Columna 2: Curso | Columna 3: Grado
+                </p>
+                {uploadSuccess && (
+                  <div className="mb-3 p-3 bg-green-100 border border-green-300 rounded-lg">
+                    <p className="text-green-800 font-medium text-sm break-words">{uploadSuccess}</p>
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleExcelUpload}
+                    disabled={isUploading}
+                    className="text-sm w-full sm:flex-1"
+                    id="excel-upload"
+                  />
+                  <Button 
+                    onClick={() => document.getElementById('excel-upload')?.click()}
+                    disabled={isUploading}
+                    className="w-full sm:w-auto sm:min-w-[120px]"
+                  >
+                    {isUploading ? "Cargando..." : "Cargar Excel"}
+                  </Button>
+                </div>
               </div>
             </div>
           </CardHeader>

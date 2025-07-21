@@ -1,0 +1,147 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===================================
+// ENUMS
+// ===================================
+
+enum Role {
+  ADMIN
+  SUPER_ADMIN
+}
+
+// ===================================
+// MODELO USER (ÚNICO - FUSIONADO)
+// ===================================
+
+model User {
+  id            String    @id @default(cuid())
+  username      String    @unique
+  password      String
+  role          Role      @default(ADMIN)
+  
+  // Campos opcionales de NextAuth
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relaciones NextAuth
+  accounts Account[]
+  sessions Session[]
+
+  @@map("users")
+}
+
+// ===================================
+// TABLAS REQUERIDAS POR NEXTAUTH
+// ===================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ===================================
+// MODELOS DE LA APLICACIÓN
+// ===================================
+
+// Modelo de Candidatos
+model Candidate {
+  id        String @id @default(cuid())
+  nombre    String
+  apellido  String
+  grado     String
+  curso     String
+  active    Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  votes Vote[]
+
+  // Índices únicos
+  @@unique([nombre, apellido, grado, curso])
+  @@map("candidates")
+}
+
+// Modelo de Votos
+model Vote {
+  id          String   @id @default(cuid())
+  candidateId String
+  grado       String
+  curso       String
+  mes         String
+  ano         String
+  timestamp   DateTime @default(now())
+
+  // Relaciones
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  // Índices para evitar votos duplicados por período
+  @@unique([grado, curso, mes, ano])
+  @@map("votes")
+}
+
+// Modelo de Períodos de Votación
+model VotingPeriod {
+  id        String   @id @default(cuid())
+  mes       String
+  ano       String
+  active    Boolean  @default(false)
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([mes, ano])
+  @@map("voting_periods")
+}

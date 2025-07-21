@@ -1,14 +1,14 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Trash2, Plus, Users, ArrowLeft, Calendar } from "lucide-react"
+import { Trash2, Plus, Users, ArrowLeft, Calendar, RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 const grados = ["1ro", "2do", "3ro", "4to", "5to", "6to"]
@@ -37,9 +37,13 @@ interface Candidate {
   apellido: string
   grado: string
   curso: string
+  active: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 export default function AdminPage() {
+  const { data: session, status } = useSession()
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [newCandidate, setNewCandidate] = useState({
     nombre: "",
@@ -47,46 +51,51 @@ export default function AdminPage() {
     grado: "",
     curso: "",
   })
-  const [selectedGrado, setSelectedGrado] = useState("")
-  const [selectedCurso, setSelectedCurso] = useState("")
+  const [selectedGrado, setSelectedGrado] = useState("all")
+  const [selectedCurso, setSelectedCurso] = useState("all")
   const [selectedMes, setSelectedMes] = useState(getCurrentMonth())
   const [selectedAno, setSelectedAno] = useState(getCurrentYear().toString())
+  const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const { toast } = useToast()
   const [uploadSuccess, setUploadSuccess] = useState<string>("")
 
-  const removeCandidate = (id: string) => {
-    const updatedCandidates = candidates.filter((candidate) => candidate.id !== id)
-    saveCandidates(updatedCandidates)
-    toast({
-      title: "Candidato eliminado",
-      description: `El candidato ha sido eliminado exitosamente`,
-    })
+  // Cargar candidatos desde la API
+  const loadCandidates = async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch('/api/candidates')
+      const data = await response.json()
+
+      if (data.success) {
+        setCandidates(data.data)
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Error al cargar candidatos",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Error al cargar candidatos:', error)
+      toast({
+        title: "Error de conexión",
+        description: "No se pudieron cargar los candidatos",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
+  // Cargar candidatos al montar el componente
   useEffect(() => {
-    const saved = localStorage.getItem("empathy-candidates")
-    if (saved) {
-      setCandidates(JSON.parse(saved))
-    }
+    loadCandidates()
   }, [])
 
-  const saveCandidates = (newCandidates: Candidate[]) => {
-    setCandidates(newCandidates)
-    localStorage.setItem("empathy-candidates", JSON.stringify(newCandidates))
-  }
-
-  const checkDuplicate = (nombre: string, apellido: string, grado: string, curso: string) => {
-    return candidates.some(
-      (candidate) =>
-        candidate.nombre.toLowerCase() === nombre.toLowerCase() &&
-        candidate.apellido.toLowerCase() === apellido.toLowerCase() &&
-        candidate.grado === grado &&
-        candidate.curso === curso,
-    )
-  }
-
-  const addCandidate = () => {
+  // Agregar candidato individual
+  const addCandidate = async () => {
     if (!newCandidate.nombre || !newCandidate.apellido || !newCandidate.grado || !newCandidate.curso) {
       toast({
         title: "Error",
@@ -96,40 +105,93 @@ export default function AdminPage() {
       return
     }
 
-    if (checkDuplicate(newCandidate.nombre, newCandidate.apellido, newCandidate.grado, newCandidate.curso)) {
+    setIsSubmitting(true)
+    try {
+      const response = await fetch('/api/candidates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newCandidate),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Agregar el nuevo candidato al estado local
+        setCandidates(prev => [...prev, data.data])
+        setNewCandidate({ nombre: "", apellido: "", grado: "", curso: "" })
+        
+        toast({
+          title: "Candidato agregado",
+          description: data.message,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Error al crear candidato",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Error al agregar candidato:', error)
       toast({
-        title: "Candidato duplicado",
-        description: `${newCandidate.nombre} ${newCandidate.apellido} ya existe en ${newCandidate.grado} - ${newCandidate.curso}`,
+        title: "Error de conexión",
+        description: "No se pudo agregar el candidato",
         variant: "destructive",
       })
-      return
+    } finally {
+      setIsSubmitting(false)
     }
-
-    const candidate: Candidate = {
-      id: Date.now().toString(),
-      ...newCandidate,
-    }
-
-    saveCandidates([...candidates, candidate])
-    setNewCandidate({ nombre: "", apellido: "", grado: "", curso: "" })
-
-    toast({
-      title: "Candidato agregado",
-      description: `${candidate.nombre} ${candidate.apellido} ha sido agregado exitosamente`,
-    })
   }
 
+  // Eliminar candidato
+  const removeCandidate = async (id: string) => {
+    try {
+      const response = await fetch(`/api/candidates/${id}`, {
+        method: 'DELETE',
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Actualizar estado local
+        setCandidates(prev => prev.filter(candidate => candidate.id !== id))
+        
+        toast({
+          title: "Candidato eliminado",
+          description: data.message,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Error al eliminar candidato",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Error al eliminar candidato:', error)
+      toast({
+        title: "Error de conexión",
+        description: "No se pudo eliminar el candidato",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Carga masiva desde Excel
   const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
     setIsUploading(true)
+    setUploadSuccess("")
 
     try {
       const XLSX = await import("xlsx")
 
       const reader = new FileReader()
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer)
           const workbook = XLSX.read(data, { type: "array" })
@@ -137,9 +199,7 @@ export default function AdminPage() {
           const worksheet = workbook.Sheets[sheetName]
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
 
-          const newCandidates: Candidate[] = []
-          const duplicates: string[] = []
-          const errors: string[] = []
+          const candidatesToUpload = []
 
           for (let i = 1; i < jsonData.length; i++) {
             const row = jsonData[i] as any[]
@@ -153,51 +213,63 @@ export default function AdminPage() {
               const apellido = nombreParts.slice(1).join(" ") || ""
 
               if (nombre && apellido && curso && grado) {
-                // Verificar duplicados
-                if (checkDuplicate(nombre, apellido, grado, curso)) {
-                  duplicates.push(`${nombre} ${apellido} (${grado} - ${curso})`)
-                } else {
-                  newCandidates.push({
-                    id: `${Date.now()}-${i}`,
-                    nombre,
-                    apellido,
-                    grado,
-                    curso,
-                  })
-                }
-              } else {
-                errors.push(`Fila ${i + 1}: Datos incompletos`)
+                candidatesToUpload.push({
+                  nombre,
+                  apellido,
+                  grado,
+                  curso,
+                })
               }
             }
           }
 
-          if (newCandidates.length > 0) {
-            saveCandidates([...candidates, ...newCandidates])
-            let message = `✅ ¡Carga exitosa! Se agregaron ${newCandidates.length} candidatos`
-
-            if (duplicates.length > 0) {
-              message += `. Se omitieron ${duplicates.length} duplicados`
-            }
-
-            if (errors.length > 0) {
-              message += `. ${errors.length} filas con errores`
-            }
-
-            setUploadSuccess(message)
-            setTimeout(() => setUploadSuccess(""), 7000)
-
-            toast({
-              title: "Carga completada",
-              description: `${newCandidates.length} candidatos agregados. ${duplicates.length} duplicados omitidos.`,
+          if (candidatesToUpload.length > 0) {
+            // Enviar a la API para carga masiva
+            const response = await fetch('/api/candidates', {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ candidates: candidatesToUpload }),
             })
+
+            const result = await response.json()
+
+            if (result.success) {
+              // Recargar candidatos
+              await loadCandidates()
+              
+              let message = `✅ ¡Carga exitosa! ${result.summary.created} candidatos creados`
+              if (result.summary.duplicates > 0) {
+                message += `, ${result.summary.duplicates} duplicados omitidos`
+              }
+              if (result.summary.errors > 0) {
+                message += `, ${result.summary.errors} errores`
+              }
+
+              setUploadSuccess(message)
+              setTimeout(() => setUploadSuccess(""), 7000)
+
+              toast({
+                title: "Carga completada",
+                description: `${result.summary.created} candidatos agregados. ${result.summary.duplicates} duplicados omitidos.`,
+              })
+            } else {
+              toast({
+                title: "Error en carga masiva",
+                description: result.message || "Error al procesar archivo Excel",
+                variant: "destructive",
+              })
+            }
           } else {
             toast({
-              title: "Sin datos nuevos",
-              description: "No se encontraron candidatos nuevos para agregar",
+              title: "Sin datos válidos",
+              description: "No se encontraron candidatos válidos en el archivo",
               variant: "destructive",
             })
           }
         } catch (error) {
+          console.error('Error al procesar Excel:', error)
           toast({
             title: "Error al procesar archivo",
             description: "Hubo un error al procesar el archivo Excel",
@@ -208,6 +280,7 @@ export default function AdminPage() {
 
       reader.readAsArrayBuffer(file)
     } catch (error) {
+      console.error('Error al cargar archivo:', error)
       toast({
         title: "Error",
         description: "Error al cargar el archivo",
@@ -219,13 +292,37 @@ export default function AdminPage() {
     }
   }
 
+  // Filtrar candidatos
   const filteredCandidates = candidates.filter((c) => {
-    if (selectedGrado && c.grado !== selectedGrado) return false
-    if (selectedCurso && c.curso !== selectedCurso) return false
+    if (selectedGrado !== "all" && c.grado !== selectedGrado) return false
+    if (selectedCurso !== "all" && c.curso !== selectedCurso) return false
     return true
   })
 
   const isFormValid = newCandidate.nombre && newCandidate.apellido && newCandidate.grado && newCandidate.curso
+
+  // Loading state
+  if (status === "loading" || isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p>Cargando panel de administración...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Authentication check
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <p>No autorizado. Redirigiendo...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
@@ -238,79 +335,115 @@ export default function AdminPage() {
                   <Users className="w-6 h-6" />
                   Gestión de Candidatos
                 </CardTitle>
-                <CardDescription>Administra los candidatos para la votación Bandera de la Empatía</CardDescription>
-
-                {/* Filtros de Mes y Año */}
-                <div className="mt-4 p-4 bg-purple-50 rounded-lg">
-                  <h3 className="font-semibold mb-2 flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    Período de Votación
-                  </h3>
-                  <div className="flex gap-4">
-                    <div>
-                      <label className="text-sm font-medium">Mes:</label>
-                      <Select value={selectedMes} onValueChange={setSelectedMes}>
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {meses.map((mes) => (
-                            <SelectItem key={mes} value={mes}>
-                              {mes}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Año:</label>
-                      <Select value={selectedAno} onValueChange={setSelectedAno}>
-                        <SelectTrigger className="w-24">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[getCurrentYear() - 1, getCurrentYear(), getCurrentYear() + 1].map((ano) => (
-                            <SelectItem key={ano} value={ano.toString()}>
-                              {ano}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                  <h3 className="font-semibold mb-2">Carga Masiva desde Excel</h3>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Formato: Columna 1: Nombre y Apellido | Columna 2: Curso | Columna 3: Grado
-                  </p>
-                  {uploadSuccess && (
-                    <div className="mt-3 p-3 bg-green-100 border border-green-300 rounded-lg">
-                      <p className="text-green-800 font-medium">{uploadSuccess}</p>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls"
-                      onChange={handleExcelUpload}
-                      disabled={isUploading}
-                      className="text-sm"
-                      id="excel-upload"
-                    />
-                    <label htmlFor="excel-upload" className="cursor-pointer">
-                      <Button asChild disabled={isUploading}>
-                        <span>{isUploading ? "Cargando..." : "Cargar Excel"}</span>
-                      </Button>
-                    </label>
-                  </div>
-                </div>
+                <CardDescription>
+                  Total: {candidates.length} candidatos | Mostrando: {filteredCandidates.length}
+                </CardDescription>
               </div>
-              <Button onClick={() => (window.location.href = "/")} variant="outline">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Volver
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={loadCandidates} variant="outline" size="sm">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Recargar
+                </Button>
+                <Button onClick={() => (window.location.href = "/")} variant="outline">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Volver
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+              <div>
+                <label className="text-sm font-medium">Filtrar por Grado:</label>
+                <Select value={selectedGrado} onValueChange={setSelectedGrado}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos los grados" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todos los grados</SelectItem>
+                    {grados.map((grado) => (
+                      <SelectItem key={grado} value={grado}>
+                        {grado}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Filtrar por Curso:</label>
+                <Select value={selectedCurso} onValueChange={setSelectedCurso}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos los cursos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todos los cursos</SelectItem>
+                    {cursos.map((curso) => (
+                      <SelectItem key={curso} value={curso}>
+                        {curso}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Mes:</label>
+                <Select value={selectedMes} onValueChange={setSelectedMes}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {meses.map((mes) => (
+                      <SelectItem key={mes} value={mes}>
+                        {mes}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Año:</label>
+                <Select value={selectedAno} onValueChange={setSelectedAno}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[getCurrentYear() - 1, getCurrentYear(), getCurrentYear() + 1].map((ano) => (
+                      <SelectItem key={ano} value={ano.toString()}>
+                        {ano}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <h3 className="font-semibold mb-2">Carga Masiva desde Excel</h3>
+              <p className="text-sm text-gray-600 mb-3">
+                Formato: Columna 1: Nombre y Apellido | Columna 2: Curso | Columna 3: Grado
+              </p>
+              {uploadSuccess && (
+                <div className="mt-3 p-3 bg-green-100 border border-green-300 rounded-lg">
+                  <p className="text-green-800 font-medium">{uploadSuccess}</p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleExcelUpload}
+                  disabled={isUploading}
+                  className="text-sm"
+                  id="excel-upload"
+                />
+                <label htmlFor="excel-upload" className="cursor-pointer">
+                  <Button asChild disabled={isUploading}>
+                    <span>{isUploading ? "Cargando..." : "Cargar Excel"}</span>
+                  </Button>
+                </label>
+              </div>
             </div>
           </CardHeader>
         </Card>
@@ -331,6 +464,7 @@ export default function AdminPage() {
                     value={newCandidate.nombre}
                     onChange={(e) => setNewCandidate({ ...newCandidate, nombre: e.target.value })}
                     placeholder="Nombre del estudiante"
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div>
@@ -341,6 +475,7 @@ export default function AdminPage() {
                     value={newCandidate.apellido}
                     onChange={(e) => setNewCandidate({ ...newCandidate, apellido: e.target.value })}
                     placeholder="Apellido del estudiante"
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
@@ -353,6 +488,7 @@ export default function AdminPage() {
                   <Select
                     value={newCandidate.grado}
                     onValueChange={(value) => setNewCandidate({ ...newCandidate, grado: value })}
+                    disabled={isSubmitting}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar grado" />
@@ -373,6 +509,7 @@ export default function AdminPage() {
                   <Select
                     value={newCandidate.curso}
                     onValueChange={(value) => setNewCandidate({ ...newCandidate, curso: value })}
+                    disabled={isSubmitting}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar curso" />
@@ -390,66 +527,65 @@ export default function AdminPage() {
 
               {!isFormValid && (
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-yellow-800 text-sm">Completa todos los campos obligatorios (*)</p>
+                  <p className="text-yellow-800 text-sm">Completa todos los campos para continuar</p>
                 </div>
               )}
 
-              <Button onClick={addCandidate} disabled={!isFormValid} className="w-full">
+              <Button 
+                onClick={addCandidate} 
+                disabled={!isFormValid || isSubmitting} 
+                className="w-full"
+              >
                 <Plus className="w-4 h-4 mr-2" />
-                Agregar Candidato
+                {isSubmitting ? "Agregando..." : "Agregar Candidato"}
               </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Filtrar Candidatos</CardTitle>
-              <div className="flex gap-2">
-                <Select value={selectedGrado} onValueChange={setSelectedGrado}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos los grados" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los grados</SelectItem>
-                    {grados.map((grado) => (
-                      <SelectItem key={grado} value={grado}>
-                        {grado}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={selectedCurso} onValueChange={setSelectedCurso}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos los cursos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los cursos</SelectItem>
-                    {cursos.map((curso) => (
-                      <SelectItem key={curso} value={curso}>
-                        {curso}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <CardTitle>Lista de Candidatos</CardTitle>
+              <CardDescription>
+                {filteredCandidates.length} candidatos encontrados
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-3 max-h-96 overflow-y-auto">
                 {filteredCandidates.length === 0 ? (
-                  <p className="text-gray-500 text-center py-4">No hay candidatos registrados</p>
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">No hay candidatos para mostrar</p>
+                    <p className="text-sm text-gray-400">
+                      {selectedGrado || selectedCurso 
+                        ? "Ajusta los filtros o agrega candidatos"
+                        : "Agrega el primer candidato"
+                      }
+                    </p>
+                  </div>
                 ) : (
                   filteredCandidates.map((candidate) => (
-                    <div key={candidate.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="font-medium">
-                          {candidate.nombre} {candidate.apellido}
-                        </p>
-                        <div className="flex gap-2 mt-1">
-                          <Badge variant="outline">{candidate.grado}</Badge>
-                          <Badge variant="secondary">{candidate.curso}</Badge>
+                    <div
+                      key={candidate.id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <p className="font-medium">
+                            {candidate.nombre} {candidate.apellido}
+                          </p>
+                          <div className="flex gap-2 mt-1">
+                            <Badge variant="outline">{candidate.grado}</Badge>
+                            <Badge variant="secondary">{candidate.curso}</Badge>
+                            {!candidate.active && (
+                              <Badge variant="destructive">Inactivo</Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <Button onClick={() => removeCandidate(candidate.id)} variant="destructive" size="sm">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => removeCandidate(candidate.id)}
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>

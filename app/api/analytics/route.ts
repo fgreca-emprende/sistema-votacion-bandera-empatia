@@ -62,8 +62,7 @@ async function getDashboardAnalytics() {
     activeCandidates,
     totalVotes,
     currentMonthVotes,
-    uniqueVoters,
-    totalPeriods
+    uniqueVoters
   ] = await Promise.all([
     prisma.candidate.count(),
     prisma.candidate.count({ where: { active: true } }),
@@ -77,8 +76,7 @@ async function getDashboardAnalytics() {
     prisma.vote.groupBy({
       by: ['grado', 'curso', 'mes', 'ano'],
       _count: true
-    }),
-    prisma.votingPeriod.count()
+    })
   ])
 
   // Top candidatos de todos los tiempos
@@ -105,6 +103,7 @@ async function getDashboardAnalytics() {
           active: true
         }
       })
+      
       return {
         candidate,
         totalVotes: item._count
@@ -167,8 +166,7 @@ async function getDashboardAnalytics() {
         totalVotes,
         currentMonthVotes,
         uniqueVoters: uniqueVoters.length,
-        totalPeriods,
-        averageVotesPerPeriod: totalPeriods > 0 ? Math.round(totalVotes / totalPeriods) : 0
+        averageVotesPerCandidate: activeCandidates > 0 ? Math.round(totalVotes / activeCandidates) : 0
       },
       topCandidates: topCandidatesWithDetails,
       mostActivePeriods,
@@ -349,15 +347,13 @@ async function getParticipationAnalytics() {
 async function getPerformanceAnalytics() {
   const [
     dbStats,
-    recentActivity,
-    systemHealth
+    recentActivity
   ] = await Promise.all([
     // Estadísticas de base de datos
     Promise.all([
       prisma.candidate.count(),
       prisma.vote.count(),
-      prisma.user.count(),
-      prisma.votingPeriod.count()
+      prisma.user.count()
     ]),
     
     // Actividad reciente (últimos 30 días)
@@ -367,34 +363,30 @@ async function getPerformanceAnalytics() {
           gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
         }
       }
-    }),
-    
-    // Salud del sistema (simulado)
-    Promise.resolve({
-      uptime: '99.9%',
-      responseTime: '120ms',
-      errorRate: '0.01%'
     })
   ])
 
-  const [totalCandidates, totalVotes, totalUsers, totalPeriods] = dbStats
+  const [totalCandidates, totalVotes, totalUsers] = dbStats
 
   return NextResponse.json({
     success: true,
     type: 'performance',
     data: {
       database: {
-        totalRecords: totalCandidates + totalVotes + totalUsers + totalPeriods,
+        totalRecords: totalCandidates + totalVotes + totalUsers,
         candidates: totalCandidates,
         votes: totalVotes,
-        users: totalUsers,
-        periods: totalPeriods
+        users: totalUsers
       },
       activity: {
         last30Days: recentActivity,
         averageDaily: Math.round(recentActivity / 30)
       },
-      system: systemHealth
+      system: {
+        uptime: '99.9%',
+        responseTime: '120ms',
+        errorRate: '0.01%'
+      }
     },
     timestamp: new Date().toISOString(),
     message: 'Analytics de rendimiento obtenidos exitosamente'

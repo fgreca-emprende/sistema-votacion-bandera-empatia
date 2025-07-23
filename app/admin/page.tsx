@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Trash2, Plus, Users, ArrowLeft, Calendar, RefreshCw } from "lucide-react"
+import { 
+  BarChart3, Trophy, ArrowLeft, RefreshCw, Plus, Trash2, 
+  Users, Calendar, Upload, Settings // Agregar Calendar y Settings
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 const grados = ["1ro", "2do", "3ro", "4to", "5to", "6to"]
@@ -375,6 +378,40 @@ export default function AdminPage() {
                   </Button>
                 </div>
               </div>
+              <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                {/* NUEVO: Botón Dashboard Analytics */}
+                <Button 
+                  onClick={() => window.location.href = "/admin/dashboard"} 
+                  className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Dashboard Analytics
+                </Button>
+                {/* NUEVO: Botón Gestión de Períodos */}
+                <Button 
+                  onClick={() => window.location.href = "/admin/periods"} 
+                  className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Gestionar Períodos
+                </Button>
+                {/* Botón Ver Resultados existente */}
+                <Button 
+                  onClick={() => window.location.href = `/results?mes=${selectedMes}&ano=${selectedAno}`} 
+                  variant="outline"
+                >
+                  <Trophy className="w-4 h-4 mr-2" />
+                  Ver Resultados
+                </Button>
+                
+                {/* Botón Volver existente */}
+                <Button onClick={() => window.location.href = "/"} variant="outline">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Volver al Inicio
+                </Button>
+              </div>
+            </div>
 
               {/* Filtros */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

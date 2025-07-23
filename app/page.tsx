@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Heart, Users, Vote, LogOut } from "lucide-react"
+import { CheckCircle, XCircle, Heart, Users, Vote, LogOut } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 const grados = ["1ro", "2do", "3ro", "4to", "5to", "6to"]
 const cursos = ["Arrayan", "Jacarandá", "Ceibo"]
@@ -28,6 +29,22 @@ const meses = [
 const getCurrentYear = () => new Date().getFullYear()
 const getCurrentMonth = () => meses[new Date().getMonth()]
 
+interface PeriodStatus {
+  success: boolean
+  hasActivePeriod: boolean
+  currentPeriod: {
+    mes: string
+    ano: string
+    startDate: string
+    endDate: string
+  } | null
+  periodStats?: {
+    totalVotes: number
+    totalCandidates: number
+  }
+  message: string
+}
+
 export default function HomePage() {
   const { data: session, status } = useSession()
   const [selectedGrado, setSelectedGrado] = useState("all")  
@@ -35,8 +52,42 @@ export default function HomePage() {
   const [selectedMes, setSelectedMes] = useState(getCurrentMonth())
   const [selectedAno, setSelectedAno] = useState(getCurrentYear().toString())
   const [userType, setUserType] = useState<"student" | null>(null)
+  const [periodStatus, setPeriodStatus] = useState<PeriodStatus | null>(null)
+  const [isCheckingPeriod, setIsCheckingPeriod] = useState(true)
+  const { toast } = useToast()
+
+  // Agregar esta función para verificar períodos activos:
+  const checkActivePeriod = async () => {
+    try {
+      setIsCheckingPeriod(true)
+      const response = await fetch('/api/period-status')
+      const data = await response.json()
+      
+      if (data.success) {
+        setPeriodStatus(data)
+      }
+    } catch (error) {
+      console.error('Error al verificar período activo:', error)
+    } finally {
+      setIsCheckingPeriod(false)
+    }
+  }
+
+  // Agregar este useEffect para verificar el período al cargar:
+  useEffect(() => {
+    checkActivePeriod()
+  }, [])
 
   const handleVotar = () => {
+    if (!periodStatus?.hasActivePeriod) {
+      toast({
+        title: "Sin período activo",
+        description: "No hay períodos de votación activos en este momento. Contacta al administrador.",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (selectedGrado && selectedCurso && selectedMes && selectedAno) {
       window.location.href = `/voting?grado=${selectedGrado}&curso=${selectedCurso}&mes=${selectedMes}&ano=${selectedAno}`
     }
@@ -99,6 +150,39 @@ export default function HomePage() {
       </div>
     )
   }
+
+  {/* Alerta de período activo/inactivo */}
+  {!isCheckingPeriod && periodStatus && (
+    <div className="mb-4">
+      {periodStatus.hasActivePeriod ? (
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-green-600" />
+            <span className="text-sm font-medium text-green-800">
+              Período activo: {periodStatus.currentPeriod?.mes} {periodStatus.currentPeriod?.ano}
+            </span>
+          </div>
+          {periodStatus.periodStats && (
+            <div className="text-xs text-green-700 mt-1">
+              {periodStatus.periodStats.totalVotes} votos registrados • {periodStatus.periodStats.totalCandidates} candidatos disponibles
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <XCircle className="w-4 h-4 text-red-600" />
+            <span className="text-sm font-medium text-red-800">
+              No hay períodos de votación activos
+            </span>
+          </div>
+          <p className="text-xs text-red-700 mt-1">
+            Las votaciones están deshabilitadas. Contacta al administrador para más información.
+          </p>
+        </div>
+      )}
+    </div>
+  )}
 
   // Si está en modo estudiante, mostrar formulario de votación
   if (userType === "student") {

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Providers } from './providers'
+import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
   title: 'Sistema de votacion bandera empatia',
@@ -18,6 +19,7 @@ export default function RootLayout({
       <body>
         <Providers>
           {children}
+          <Toaster />  {/* 🔥 AGREGAR ESTA LÍNEA */}
         </Providers>
       </body>
     </html>

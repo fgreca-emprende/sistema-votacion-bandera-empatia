@@ -171,6 +171,56 @@ export async function POST(request: NextRequest) {
 
     const validatedData = validation.data
 
+    // 🔥 NUEVA VALIDACIÓN: Verificar que hay un período activo para este mes/año
+    const activePeriod = await prisma.votingPeriod.findFirst({
+      where: {
+        mes: validatedData.mes,
+        ano: validatedData.ano,
+        active: true
+      }
+    })
+
+    if (!activePeriod) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Período de votación no activo',
+          message: `No hay un período de votación activo para ${validatedData.mes} ${validatedData.ano}. Contacta al administrador.`,
+          code: 'PERIOD_NOT_ACTIVE'
+        },
+        { status: 403 }
+      )
+    }
+
+    // 🔥 NUEVA VALIDACIÓN: Verificar que estamos dentro del rango de fechas
+    const currentDate = new Date()
+    const startDate = new Date(activePeriod.startDate)
+    const endDate = new Date(activePeriod.endDate)
+
+    if (currentDate < startDate) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Período de votación no iniciado',
+          message: `El período de votación para ${validatedData.mes} ${validatedData.ano} comienza el ${startDate.toLocaleDateString('es-ES')}.`,
+          code: 'PERIOD_NOT_STARTED'
+        },
+        { status: 403 }
+      )
+    }
+
+    if (currentDate > endDate) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Período de votación finalizado',
+          message: `El período de votación para ${validatedData.mes} ${validatedData.ano} finalizó el ${endDate.toLocaleDateString('es-ES')}.`,
+          code: 'PERIOD_ENDED'
+        },
+        { status: 403 }
+      )
+    }
+
     // Verificar que el candidato existe y está activo
     const candidate = await prisma.candidate.findUnique({
       where: { 
@@ -329,6 +379,50 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // 🔥 NUEVA VALIDACIÓN: Verificar período activo también en la verificación
+    const activePeriod = await prisma.votingPeriod.findFirst({
+      where: {
+        mes,
+        ano,
+        active: true
+      }
+    })
+
+    if (!activePeriod) {
+      return NextResponse.json({
+        success: true,
+        hasVoted: false,
+        canVote: false,
+        reason: 'PERIOD_NOT_ACTIVE',
+        message: `No hay un período de votación activo para ${mes} ${ano}`
+      })
+    }
+
+    // Verificar rango de fechas
+    const currentDate = new Date()
+    const startDate = new Date(activePeriod.startDate)
+    const endDate = new Date(activePeriod.endDate)
+
+    if (currentDate < startDate) {
+      return NextResponse.json({
+        success: true,
+        hasVoted: false,
+        canVote: false,
+        reason: 'PERIOD_NOT_STARTED',
+        message: `El período de votación comienza el ${startDate.toLocaleDateString('es-ES')}`
+      })
+    }
+
+    if (currentDate > endDate) {
+      return NextResponse.json({
+        success: true,
+        hasVoted: false,
+        canVote: false,
+        reason: 'PERIOD_ENDED',
+        message: `El período de votación finalizó el ${endDate.toLocaleDateString('es-ES')}`
+      })
+    }
+
     // Verificar si ya existe un voto
     const existingVote = await prisma.vote.findUnique({
       where: {
@@ -353,6 +447,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({
         success: true,
         hasVoted: true,
+        canVote: false,
         data: {
           candidate: existingVote.candidate,
           timestamp: existingVote.timestamp,
@@ -367,7 +462,8 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       hasVoted: false,
-      message: `No hay votos registrados para ${grado} - ${curso} en ${mes} ${ano}`
+      canVote: true,
+      message: `Puedes votar para ${grado} - ${curso} en ${mes} ${ano}`
     })
 
   } catch (error) {

@@ -23,6 +23,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { ThemeToggle, ThemeGradientBackground } from "@/components/theme/theme-toggle"
 import { cn } from "@/lib/utils"
+import os from 'os'
 
 // COMPONENTE CHARTEERROR MEJORADO - Reemplaza el existente
 const ChartError = ({ message = "No hay datos disponibles" }: { message?: string }) => (
@@ -196,6 +197,9 @@ export default function AnalyticsDashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("overview")
   const [trendsPeriod, setTrendsPeriod] = useState("6")
+  const [performanceData, setPerformanceData] = useState<any>(null)
+  const [performanceLoading, setPerformanceLoading] = useState(false)
+
   const { toast } = useToast()
 
   // Cargar datos del dashboard
@@ -261,6 +265,33 @@ export default function AnalyticsDashboardPage() {
     }
   }
 
+  const loadPerformanceData = async () => {
+    try {
+      setPerformanceLoading(true)
+      const response = await fetch('/api/performance')
+      const data = await response.json()
+
+      if (data.success) {
+        setPerformanceData(data.data)
+      } else {
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar las métricas de performance",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Error cargando performance:', error)
+      toast({
+        title: "Error de conexión",
+        description: "No se pudieron cargar las métricas",
+        variant: "destructive",
+      })
+    } finally {
+      setPerformanceLoading(false)
+    }
+  }
+
   // Cargar todos los datos
   const loadAllData = async () => {
     setIsLoading(true)
@@ -287,6 +318,28 @@ export default function AnalyticsDashboardPage() {
       loadTrendsData()
     }
   }, [trendsPeriod])
+
+  // Cargar métricas cuando se abre el tab performance
+  useEffect(() => {
+    if (activeTab === 'performance' && !performanceData) {
+      loadPerformanceData()
+    }
+  }, [activeTab])
+
+  // Auto-refresh cada 30 segundos cuando el tab está activo
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    
+    if (activeTab === 'performance') {
+      interval = setInterval(() => {
+        loadPerformanceData()
+      }, 30000) // 30 segundos
+    }
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [activeTab])
 
   // Validar que tenemos datos antes de renderizar
   const hasValidDashboardData = dashboardData && 
@@ -1266,7 +1319,7 @@ export default function AnalyticsDashboardPage() {
             )}
           </TabsContent>
 
-          {/* TAB: RENDIMIENTO MEJORADO - Reemplaza todo el TabsContent value="performance" */}
+          {/* TAB: RENDIMIENTO CON MÉTRICAS REALES */}
           <TabsContent value="performance" className="space-y-6 animate-in fade-in duration-500">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-red-600 rounded-full flex items-center justify-center">
@@ -1277,318 +1330,275 @@ export default function AnalyticsDashboardPage() {
               </h3>
             </div>
 
-            {/* Métricas de rendimiento principales mejoradas */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-bottom duration-500 animation-delay-200">
-              <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white transition-all duration-300 hover:shadow-xl hover:-translate-y-2 border-0">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardDescription className="text-green-100 font-medium">Tiempo de Respuesta</CardDescription>
-                      <CardTitle className="text-3xl font-bold">~120ms</CardTitle>
-                    </div>
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-green-300 rounded-full animate-pulse opacity-30"></div>
-                      <Zap className="relative w-12 h-12 text-green-200" />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-sm text-green-100 font-medium flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-200 rounded-full animate-pulse"></div>
-                    Promedio del sistema
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white transition-all duration-300 hover:shadow-xl hover:-translate-y-2 border-0">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardDescription className="text-blue-100 font-medium">Disponibilidad</CardDescription>
-                      <CardTitle className="text-3xl font-bold">99.9%</CardTitle>
-                    </div>
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-blue-300 rounded-full animate-pulse opacity-30"></div>
-                      <Activity className="relative w-12 h-12 text-blue-200" />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-sm text-blue-100 font-medium flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-200 rounded-full animate-pulse"></div>
-                    Uptime del sistema
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-red-500 to-red-600 text-white transition-all duration-300 hover:shadow-xl hover:-translate-y-2 border-0">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardDescription className="text-red-100 font-medium">Tasa de Error</CardDescription>
-                      <CardTitle className="text-3xl font-bold">0.01%</CardTitle>
-                    </div>
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-red-300 rounded-full animate-pulse opacity-30"></div>
-                      <Target className="relative w-12 h-12 text-red-200" />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-sm text-red-100 font-medium flex items-center gap-2">
-                    <div className="w-2 h-2 bg-red-200 rounded-full animate-pulse"></div>
-                    Errores del sistema
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Header con botón de refresh */}
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${performanceData ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                <span className="text-sm text-gray-600 dark:text-gray-300">
+                  {performanceData ? `Última actualización: ${new Date().toLocaleTimeString()}` : 'Sin datos'}
+                </span>
+              </div>
+              <Button 
+                onClick={loadPerformanceData} 
+                variant="outline" 
+                size="sm"
+                disabled={performanceLoading}
+                className="transition-all duration-300 hover:scale-105"
+              >
+                <RefreshCw className={cn("w-4 h-4 mr-2", performanceLoading && "animate-spin")} />
+                Actualizar
+              </Button>
             </div>
 
-            {/* Métricas técnicas adicionales */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-bottom duration-500 animation-delay-300">
-              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200 dark:border-purple-800 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-300 flex items-center gap-2">
-                    <Gauge className="w-4 h-4" />
-                    CPU Usage
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">23%</div>
-                  <div className="text-xs text-purple-600 dark:text-purple-400">Promedio</div>
-                </CardContent>
-              </Card>
+            {performanceLoading && !performanceData ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
+                <p className="text-gray-500">Cargando métricas del sistema...</p>
+              </div>
+            ) : performanceData ? (
+              <>
+                {/* Métricas principales del sistema */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-bottom duration-500 animation-delay-200">
+                  <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white transition-all duration-300 hover:shadow-xl hover:-translate-y-2 border-0">
+                    <CardHeader className="pb-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardDescription className="text-green-100 font-medium">Tiempo de Respuesta</CardDescription>
+                          <CardTitle className="text-3xl font-bold">{performanceData.api.avgResponseTime}ms</CardTitle>
+                        </div>
+                        <div className="relative">
+                          <div className="absolute inset-0 bg-green-300 rounded-full animate-pulse opacity-30"></div>
+                          <Zap className="relative w-12 h-12 text-green-200" />
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-green-100 font-medium flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-200 rounded-full animate-pulse"></div>
+                        Promedio de API
+                      </div>
+                    </CardContent>
+                  </Card>
 
-              <Card className="bg-gradient-to-br from-cyan-50 to-cyan-100 dark:from-cyan-900/20 dark:to-cyan-800/20 border-cyan-200 dark:border-cyan-800 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-cyan-700 dark:text-cyan-300 flex items-center gap-2">
-                    <Database className="w-4 h-4" />
-                    RAM Usage
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">1.2GB</div>
-                  <div className="text-xs text-cyan-600 dark:text-cyan-400">En uso</div>
-                </CardContent>
-              </Card>
+                  <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white transition-all duration-300 hover:shadow-xl hover:-translate-y-2 border-0">
+                    <CardHeader className="pb-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardDescription className="text-blue-100 font-medium">Tiempo Activo</CardDescription>
+                          <CardTitle className="text-2xl font-bold">{performanceData.system.uptimeFormatted}</CardTitle>
+                        </div>
+                        <div className="relative">
+                          <div className="absolute inset-0 bg-blue-300 rounded-full animate-pulse opacity-30"></div>
+                          <Activity className="relative w-12 h-12 text-blue-200" />
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-blue-100 font-medium flex items-center gap-2">
+                        <div className="w-2 h-2 bg-blue-200 rounded-full animate-pulse"></div>
+                        Sistema activo
+                      </div>
+                    </CardContent>
+                  </Card>
 
-              <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-800/20 border-emerald-200 dark:border-emerald-800 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
-                    <Zap className="w-4 h-4" />
-                    API Calls
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">1.2K</div>
-                  <div className="text-xs text-emerald-600 dark:text-emerald-400">Hoy</div>
-                </CardContent>
-              </Card>
+                  <Card className="bg-gradient-to-br from-red-500 to-red-600 text-white transition-all duration-300 hover:shadow-xl hover:-translate-y-2 border-0">
+                    <CardHeader className="pb-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardDescription className="text-red-100 font-medium">Tasa de Error</CardDescription>
+                          <CardTitle className="text-3xl font-bold">{performanceData.api.errorRate}%</CardTitle>
+                        </div>
+                        <div className="relative">
+                          <div className="absolute inset-0 bg-red-300 rounded-full animate-pulse opacity-30"></div>
+                          <Target className="relative w-12 h-12 text-red-200" />
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-red-100 font-medium flex items-center gap-2">
+                        <div className="w-2 h-2 bg-red-200 rounded-full animate-pulse"></div>
+                        De {performanceData.api.totalRequests} requests
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
 
-              <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 border-amber-200 dark:border-amber-800 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-300 flex items-center gap-2">
-                    <Activity className="w-4 h-4" />
-                    Cache Hit
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">94%</div>
-                  <div className="text-xs text-amber-600 dark:text-amber-400">Eficiencia</div>
-                </CardContent>
-              </Card>
-            </div>
+                {/* Métricas técnicas detalladas */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-bottom duration-500 animation-delay-300">
+                  <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200 dark:border-purple-800 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-300 flex items-center gap-2">
+                        <Gauge className="w-4 h-4" />
+                        CPU Usage
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{performanceData.cpu.usage}%</div>
+                      <div className="text-xs text-purple-600 dark:text-purple-400">{performanceData.cpu.cores} cores</div>
+                    </CardContent>
+                  </Card>
 
-            {/* Estadísticas de Base de Datos mejoradas */}
-            {dashboardData && (
-              <Card className="animate-in slide-in-from-bottom duration-500 animation-delay-400 border-0 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
-                      <Database className="w-5 h-5 text-white" />
+                  <Card className="bg-gradient-to-br from-cyan-50 to-cyan-100 dark:from-cyan-900/20 dark:to-cyan-800/20 border-cyan-200 dark:border-cyan-800 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-cyan-700 dark:text-cyan-300 flex items-center gap-2">
+                        <Database className="w-4 h-4" />
+                        Memoria RAM
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{performanceData.memory.usagePercentage}%</div>
+                      <div className="text-xs text-cyan-600 dark:text-cyan-400">{performanceData.memory.usedFormatted} / {performanceData.memory.totalFormatted}</div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-800/20 border-emerald-200 dark:border-emerald-800 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                        <Zap className="w-4 h-4" />
+                        API Calls
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{performanceData.api.todayRequests.toLocaleString()}</div>
+                      <div className="text-xs text-emerald-600 dark:text-emerald-400">Hoy</div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 border-amber-200 dark:border-amber-800 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                        <Activity className="w-4 h-4" />
+                        Cache Hit
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{performanceData.cache.hitRate}%</div>
+                      <div className="text-xs text-amber-600 dark:text-amber-400">{performanceData.cache.totalHits.toLocaleString()} hits</div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Información del sistema */}
+                <Card className="animate-in slide-in-from-bottom duration-500 animation-delay-400 border-0 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <Database className="w-5 h-5 text-white" />
+                      </div>
+                      Información del Sistema
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-indigo-700 dark:text-indigo-300">Sistema Operativo</h4>
+                        <div className="space-y-1 text-sm">
+                          <p><span className="font-medium">Plataforma:</span> {performanceData.system.platform}</p>
+                          <p><span className="font-medium">Arquitectura:</span> {performanceData.system.architecture}</p>
+                          <p><span className="font-medium">Node.js:</span> {performanceData.system.nodeVersion}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-purple-700 dark:text-purple-300">Base de Datos</h4>
+                        <div className="space-y-1 text-sm">
+                          <p><span className="font-medium">Total registros:</span> {performanceData.database.totalRecords.toLocaleString()}</p>
+                          <p><span className="font-medium">Candidatos:</span> {performanceData.database.totalCandidates}</p>
+                          <p><span className="font-medium">Votos:</span> {performanceData.database.totalVotes.toLocaleString()}</p>
+                          <p><span className="font-medium">Query promedio:</span> {performanceData.database.avgQueryTime}ms</p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-cyan-700 dark:text-cyan-300">Procesador</h4>
+                        <div className="space-y-1 text-sm">
+                          <p><span className="font-medium">Cores:</span> {performanceData.cpu.cores}</p>
+                          <p><span className="font-medium">Uso actual:</span> {performanceData.cpu.usage}%</p>
+                          <p><span className="font-medium">Load avg:</span> {performanceData.cpu.loadAverage[0].toFixed(2)}</p>
+                        </div>
+                      </div>
                     </div>
-                    Estadísticas de Base de Datos
-                  </CardTitle>
-                  <CardDescription>
-                    Métricas de almacenamiento y rendimiento de la base de datos
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="text-center p-4 bg-white/80 dark:bg-gray-800/80 rounded-xl border border-purple-200 dark:border-purple-800 transition-all duration-300 hover:scale-105">
-                      <div className="text-3xl font-bold text-purple-600 dark:text-purple-400 mb-2">
-                        {dashboardData.overview.totalCandidates}
+                  </CardContent>
+                </Card>
+
+                {/* Estado de servicios */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom duration-500 animation-delay-600">
+                  <Card className="border-0 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center">
+                          <Activity className="w-4 h-4 text-white" />
+                        </div>
+                        Estado de Servicios
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
+                          <span className="text-sm font-medium flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            API Gateway
+                          </span>
+                          <Badge className="bg-green-500 text-white">Activo</Badge>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
+                          <span className="text-sm font-medium flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            Base de Datos
+                          </span>
+                          <Badge className="bg-green-500 text-white">Activo ({performanceData.database.avgQueryTime}ms)</Badge>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
+                          <span className="text-sm font-medium flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            Autenticación
+                          </span>
+                          <Badge className="bg-green-500 text-white">Activo</Badge>
+                        </div>
                       </div>
-                      <div className="text-sm text-purple-700 dark:text-purple-300 font-medium flex items-center justify-center gap-2">
-                        <Users className="w-4 h-4" />
-                        Candidatos
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-0 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-full flex items-center justify-center">
+                          <Eye className="w-4 h-4 text-white" />
+                        </div>
+                        Estadísticas en Tiempo Real
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
+                          <span className="text-sm font-medium">Requests totales</span>
+                          <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">{performanceData.api.totalRequests.toLocaleString()}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
+                          <span className="text-sm font-medium">Requests hoy</span>
+                          <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">{performanceData.api.todayRequests.toLocaleString()}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
+                          <span className="text-sm font-medium">Cache hits</span>
+                          <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">{performanceData.cache.totalHits.toLocaleString()}</span>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="text-center p-4 bg-white/80 dark:bg-gray-800/80 rounded-xl border border-cyan-200 dark:border-cyan-800 transition-all duration-300 hover:scale-105">
-                      <div className="text-3xl font-bold text-cyan-600 dark:text-cyan-400 mb-2">
-                        {dashboardData.overview.totalVotes}
-                      </div>
-                      <div className="text-sm text-cyan-700 dark:text-cyan-300 font-medium flex items-center justify-center gap-2">
-                        <Vote className="w-4 h-4" />
-                        Votos
-                      </div>
-                    </div>
-                    
-                    <div className="text-center p-4 bg-white/80 dark:bg-gray-800/80 rounded-xl border border-emerald-200 dark:border-emerald-800 transition-all duration-300 hover:scale-105">
-                      <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mb-2">1</div>
-                      <div className="text-sm text-emerald-700 dark:text-emerald-300 font-medium flex items-center justify-center gap-2">
-                        <Shield className="w-4 h-4" />
-                        Admin
-                      </div>
-                    </div>
-                    
-                    <div className="text-center p-4 bg-white/80 dark:bg-gray-800/80 rounded-xl border border-amber-200 dark:border-amber-800 transition-all duration-300 hover:scale-105">
-                      <div className="text-3xl font-bold text-amber-600 dark:text-amber-400 mb-2">
-                        {dashboardData.overview.uniqueVoters}
-                      </div>
-                      <div className="text-sm text-amber-700 dark:text-amber-300 font-medium flex items-center justify-center gap-2">
-                        <Calendar className="w-4 h-4" />
-                        Períodos
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Activity className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-lg text-gray-500 dark:text-gray-400 mb-2">No hay datos de performance</p>
+                <Button onClick={loadPerformanceData} variant="outline">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Cargar Métricas
+                </Button>
+              </div>
             )}
-
-            {/* Gráfico de rendimiento simulado */}
-            <Card className="animate-in slide-in-from-bottom duration-500 animation-delay-500 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center">
-                    <LineChartIcon className="w-5 h-5 text-white" />
-                  </div>
-                  Rendimiento del Sistema en Tiempo Real
-                </CardTitle>
-                <CardDescription>
-                  Métricas de respuesta y throughput de las últimas 24 horas
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={[
-                    { time: '00:00', responseTime: 120, throughput: 95 },
-                    { time: '04:00', responseTime: 110, throughput: 98 },
-                    { time: '08:00', responseTime: 140, throughput: 92 },
-                    { time: '12:00', responseTime: 160, throughput: 89 },
-                    { time: '16:00', responseTime: 135, throughput: 94 },
-                    { time: '20:00', responseTime: 125, throughput: 96 },
-                    { time: '24:00', responseTime: 115, throughput: 97 }
-                  ]}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e4e7" />
-                    <XAxis 
-                      dataKey="time" 
-                      tick={{ fontSize: 12, fill: '#6b7280' }}
-                    />
-                    <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
-                    <Tooltip 
-                      formatter={(value: number, name: string) => [
-                        name === 'responseTime' ? `${value}ms` : `${value}%`,
-                        name === 'responseTime' ? 'Tiempo de Respuesta' : 'Throughput'
-                      ]}
-                      labelFormatter={(label) => `Hora: ${label}`}
-                      contentStyle={{
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '12px',
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-                        backdropFilter: 'blur(8px)'
-                      }}
-                    />
-                    <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="responseTime" 
-                      stroke="#10b981" 
-                      strokeWidth={3}
-                      dot={{ fill: '#10b981', strokeWidth: 2, r: 6 }}
-                      activeDot={{ r: 8, stroke: '#10b981', strokeWidth: 2 }}
-                      name="Tiempo de Respuesta (ms)"
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="throughput" 
-                      stroke="#f59e0b" 
-                      strokeWidth={3}
-                      dot={{ fill: '#f59e0b', strokeWidth: 2, r: 6 }}
-                      activeDot={{ r: 8, stroke: '#f59e0b', strokeWidth: 2 }}
-                      name="Throughput (%)"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Alertas y estado del sistema */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom duration-500 animation-delay-600">
-              <Card className="border-0 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center">
-                      <Activity className="w-4 h-4 text-white" />
-                    </div>
-                    Estado del Sistema
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                      <span className="text-sm font-medium flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        API Gateway
-                      </span>
-                      <Badge className="bg-green-500 text-white">Activo</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                      <span className="text-sm font-medium flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        Base de Datos
-                      </span>
-                      <Badge className="bg-green-500 text-white">Activo</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                      <span className="text-sm font-medium flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        Autenticación
-                      </span>
-                      <Badge className="bg-green-500 text-white">Activo</Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-0 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-full flex items-center justify-center">
-                      <Eye className="w-4 h-4 text-white" />
-                    </div>
-                    Monitoreo 24/7
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                      <span className="text-sm font-medium">Última verificación</span>
-                      <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">Hace 2 min</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                      <span className="text-sm font-medium">Próxima verificación</span>
-                      <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">En 3 min</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                      <span className="text-sm font-medium">Alertas activas</span>
-                      <Badge variant="secondary">0</Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
 
             {/* Mensaje de rendimiento */}
             <Card className="animate-in fade-in duration-500 animation-delay-800 shadow-xl border-0 bg-gradient-to-r from-orange-50 via-red-50 to-pink-50 dark:from-orange-900/20 dark:via-red-900/20 dark:to-pink-900/20">
@@ -1599,11 +1609,11 @@ export default function AnalyticsDashboardPage() {
                   <Zap className="w-8 h-8 text-orange-500 animate-pulse" />
                 </div>
                 <h3 className="text-2xl font-bold bg-gradient-to-r from-orange-600 via-red-600 to-pink-600 bg-clip-text text-transparent mb-2">
-                  ¡Sistema Optimizado!
+                  ¡Sistema Optimizado en Tiempo Real!
                 </h3>
                 <p className="text-gray-600 dark:text-gray-300 text-lg">
-                  Nuestro sistema mantiene un rendimiento óptimo para garantizar la mejor experiencia 
-                  en cada voto y consulta. Monitoreamos constantemente para la excelencia.
+                  Monitoreo continuo de métricas reales del sistema para garantizar el mejor rendimiento 
+                  y disponibilidad del Sistema Bandera de la Empatía.
                 </p>
               </CardContent>
             </Card>
